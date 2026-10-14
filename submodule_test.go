@@ -273,6 +273,35 @@ func TestSubmodulesStatus(t *testing.T) {
 	})
 }
 
+func TestStatusDoesNotInitializeUnclonedSubmodule(t *testing.T) {
+	t.Parallel()
+
+	fixtures.ByTag("submodule").Run(t, func(t *testing.T, f *fixtures.Fixture) {
+		t.Parallel()
+
+		r, wt := cloneFixture(t, f)
+		defer func() { _ = r.Close() }()
+
+		name := primaryFixtureSubmoduleName(f)
+		sm := namedSubmodule(t, wt, name)
+		require.NoError(t, sm.Init())
+
+		_, err := wt.Status()
+		require.NoError(t, err)
+
+		root := wt.Filesystem().Root()
+		_, err = os.Stat(filepath.Join(root, sm.Config().Path, ".git"))
+		require.ErrorIs(t, err, os.ErrNotExist, "status must not create the submodule worktree pointer")
+		_, err = os.Stat(filepath.Join(root, ".git", "modules", sm.Config().Name, "HEAD"))
+		require.ErrorIs(t, err, os.ErrNotExist, "status must not initialize the submodule repository")
+
+		status, err := sm.Status()
+		require.NoError(t, err)
+		require.Equal(t, submoduleHashFromIndex(t, r, name), status.Expected)
+		require.True(t, status.Current.IsZero())
+	})
+}
+
 func TestSubmodulesUpdateContext(t *testing.T) {
 	t.Parallel()
 
